@@ -8,13 +8,13 @@
 
 ## 2. 当前状态
 
-- 当前里程碑：阶段 0 已完成，等待学习者明确确认是否进入阶段 1。
-- 阶段 0 状态：已完成；11 个离线测试和一次真实模型手动验收均已通过。
-- 当前代码：最小命令行 LLM 程序。
+- 当前里程碑：阶段 1 已完成，等待学习者明确确认是否进入阶段 2。
+- 阶段 1 状态：已完成；25 个离线测试和一次真实模型验收均已通过。
+- 当前代码：具有显式 State、受限 Loop 和结构化决策的无工具 Agent。
 - 当前依赖：使用 venv + pip；`pyproject.toml` 与 `requirements.lock` 已创建。
 - 当前配置：使用 OpenAI SDK 调用硅基流动 Chat Completions API，默认模型为 `deepseek-ai/DeepSeek-V4-Flash`；未读取或输出真实 API Key。
-- 当前可运行能力：读取一条命令行输入并完成一次模型调用；测试可使用 Fake Generator 离线运行。
-- 当前本地版本：阶段 0 由 Git tag `stage-00` 定位；远程发布状态以仓库 remote 为准。
+- 当前可运行能力：围绕任务目标循环，展示公开步骤，并以五类原因之一终止；测试使用脚本化 Decision Maker 离线运行。
+- 当前版本：阶段 1 由 Git tag `stage-01` 定位；远程发布状态以仓库 remote 为准。
 
 权威阶段状态以 [stage-specification.md](stage-specification.md) 为准，当前架构以 [architecture.md](architecture.md) 为准。
 
@@ -33,6 +33,7 @@
 | [decisions/README.md](decisions/README.md) | 架构决策记录（ADR）规范和模板 |
 | [stages/README.md](stages/README.md) | 阶段实施记录规范、模板和同步清单 |
 | [stages/stage-00.md](stages/stage-00.md) | 阶段 0 的实际实现、测试、限制和验收结果 |
+| [stages/stage-01.md](stages/stage-01.md) | 阶段 1 的 State、Loop、测试、限制和验收结果 |
 
 ## 4. 文档权威关系
 

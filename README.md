@@ -4,21 +4,22 @@
 
 ## 当前阶段
 
-当前为阶段 0：项目初始化与最小 LLM 程序。
+阶段 1（Agent State 与 Agent Loop）已完成，当前等待阶段 2 的明确确认。
 
 当前版本可以：
 
-- 从命令行读取一个问题；
-- 使用 OpenAI Python SDK 调用硅基流动的 OpenAI 兼容 Chat Completions API；
-- 输出模型的文本回复；
+- 从命令行读取一个任务目标；
+- 使用显式 `AgentState` 在最大步骤数内循环；
+- 让模型返回经过 Pydantic 校验的 JSON 决策；
+- 显示每步的公开行动、观察、决策及终止原因；
 - 从环境变量或本地 `.env` 加载 API Key 和模型名称；
 - 使用 Fake LLM 完成不联网的自动化测试。
 
-当前版本不是 Agent：它没有 Agent State、循环、工具、记忆、规划、RAG、MCP 或 Multi-Agent。
+当前版本是一个无工具的最小 Agent：它有状态和受限循环，但没有工具、记忆、规划、RAG、MCP 或 Multi-Agent。
 
 ## 文档
 
-完整需求、学习路线、架构和安全规范见 [docs/README.md](docs/README.md)。阶段 0 的实现与教学记录见 [docs/stages/stage-00.md](docs/stages/stage-00.md)。
+完整需求、学习路线、架构和安全规范见 [docs/README.md](docs/README.md)。本阶段记录见 [docs/stages/stage-01.md](docs/stages/stage-01.md)。
 
 ## 环境要求
 
@@ -50,6 +51,7 @@ python -m pip install --no-deps -e .
 SILICONFLOW_API_KEY=your_real_key
 SILICONFLOW_MODEL=deepseek-ai/DeepSeek-V4-Flash
 SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
+AGENT_MAX_STEPS=3
 ```
 
 `.env` 已被 Git 忽略。不要把真实 Key 粘贴到源码、测试、文档、日志或聊天记录。为了兼容此前创建的本地配置，程序也接受 `OPENAI_API_KEY` 和 `OPENAI_MODEL`；新配置建议使用含义更明确的 `SILICONFLOW_*` 名称。
@@ -66,7 +68,7 @@ small-agent
 python -m small_agent
 ```
 
-程序会提示输入一个问题，然后打印一次模型回复。空输入会在本地被拒绝，不调用 API。
+程序会提示输入任务目标，然后展示 Agent 的公开步骤和终止原因。`AGENT_MAX_STEPS` 允许 1～10，默认 3；空目标会在本地被拒绝。
 
 ## 测试
 

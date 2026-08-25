@@ -2,33 +2,56 @@ from __future__ import annotations
 
 import sys
 
-from small_agent.chat import InputValidationError, ask_once
+from small_agent.agent import AgentRunner, DecisionMaker
 from small_agent.config import ConfigurationError, Settings
-from small_agent.llm import LLMError, SiliconFlowLLMClient, TextGenerator
+from small_agent.llm import SiliconFlowLLMClient
+from small_agent.state import AgentStatus
 
 
-def main(generator: TextGenerator | None = None) -> int:
-    """读取一条命令行输入，调用一次模型并输出回复。"""
+def main(
+    decision_maker: DecisionMaker | None = None,
+    max_steps: int | None = None,
+) -> int:
+    """读取任务目标，运行最小 Agent 循环并展示公开步骤。"""
     try:
-        user_input = input("请输入问题：")
+        goal = input("请输入任务目标：")
     except (EOFError, KeyboardInterrupt):
         print("\n已取消。", file=sys.stderr)
         return 130
 
-    if not user_input.strip():
-        print("错误：问题不能为空。", file=sys.stderr)
+    if not goal.strip():
+        print("错误：任务目标不能为空。", file=sys.stderr)
         return 2
 
     try:
-        active_generator = generator
-        if active_generator is None:
+        active_decision_maker = decision_maker
+        active_max_steps = max_steps
+        if active_decision_maker is None:
             settings = Settings.from_env()
-            active_generator = SiliconFlowLLMClient(settings)
+            active_decision_maker = SiliconFlowLLMClient(settings)
+            if active_max_steps is None:
+                active_max_steps = settings.max_steps
+        if active_max_steps is None:
+            active_max_steps = 3
 
-        reply = ask_once(active_generator, user_input)
-    except (ConfigurationError, InputValidationError, LLMError) as exc:
+        state = AgentRunner(active_decision_maker, active_max_steps).run(goal)
+    except (ConfigurationError, ValueError) as exc:
         print(f"错误：{exc}", file=sys.stderr)
         return 1
 
-    print(f"助手：{reply}")
-    return 0
+    for step in state.steps:
+        print(f"步骤 {step.index}")
+        print(f"决策：{step.decision.value}")
+        print(f"行动：{step.action}")
+        print(f"观察：{step.observation}")
+
+    if state.termination_reason is not None:
+        print(f"终止原因：{state.termination_reason.value}")
+
+    if state.status == AgentStatus.COMPLETED:
+        print(f"助手：{state.final_answer}")
+        return 0
+
+    if state.error:
+        print(f"错误：{state.error}", file=sys.stderr)
+    return 130 if state.status == AgentStatus.CANCELLED else 1

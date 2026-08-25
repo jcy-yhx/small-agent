@@ -76,11 +76,12 @@
 
 ### 计划中的变量类别
 
-阶段 0 已使用：
+当前已使用：
 
 - `SILICONFLOW_API_KEY`：必填 Secret，无默认值；
 - `SILICONFLOW_MODEL`：可选，默认 `deepseek-ai/DeepSeek-V4-Flash`；
 - `SILICONFLOW_BASE_URL`：可选，默认 `https://api.siliconflow.cn/v1`。
+- `AGENT_MAX_STEPS`：可选整数，范围 1～10，默认 3，不是 Secret。
 
 为了兼容已经创建的本地配置，程序也接受 `OPENAI_API_KEY` 与 `OPENAI_MODEL`，但新配置应使用 `SILICONFLOW_*`。配置加载只读取当前工作目录的 `.env`，不得向父目录搜索 Secret。
 
@@ -88,7 +89,7 @@
 
 - 可选 API Base URL；
 - 日志级别和运行环境；
-- Agent 最大步数、超时、Token 与成本预算；
+- Agent 超时、Token 与成本预算；
 - 数据库、知识库和工作区路径；
 - MCP Server 配置。
 

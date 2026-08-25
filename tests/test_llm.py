@@ -5,7 +5,13 @@ from types import SimpleNamespace
 import pytest
 
 from small_agent.config import Settings
-from small_agent.llm import LLMError, SYSTEM_PROMPT, SiliconFlowLLMClient
+from small_agent.llm import (
+    AGENT_SYSTEM_PROMPT,
+    LLMError,
+    SYSTEM_PROMPT,
+    SiliconFlowLLMClient,
+)
+from small_agent.state import AgentState, DecisionType
 
 
 class FakeCompletions:
@@ -57,3 +63,35 @@ def test_siliconflow_client_rejects_empty_output() -> None:
 
     with pytest.raises(LLMError, match="没有返回"):
         client.generate("用户问题")
+
+
+def test_siliconflow_client_requests_and_validates_json_decision() -> None:
+    sdk_client = FakeSDKClient(
+        '{"decision":"complete","action":"回答",'
+        '"observation":"信息充分","final_answer":"42"}'
+    )
+    client = SiliconFlowLLMClient(
+        Settings(api_key="test-key", model="test-model"),
+        sdk_client=sdk_client,  # type: ignore[arg-type]
+    )
+
+    result = client.decide(AgentState(goal="答案是什么", max_steps=3))
+
+    call = sdk_client.chat.completions.calls[0]
+    messages = call["messages"]
+    assert result.decision == DecisionType.COMPLETE
+    assert result.final_answer == "42"
+    assert call["response_format"] == {"type": "json_object"}
+    assert call["max_tokens"] == 1024
+    assert isinstance(messages, list)
+    assert messages[0] == {"role": "system", "content": AGENT_SYSTEM_PROMPT}
+
+
+def test_siliconflow_client_rejects_invalid_json_decision() -> None:
+    client = SiliconFlowLLMClient(
+        Settings(api_key="test-key"),
+        sdk_client=FakeSDKClient("not-json"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(LLMError, match="约定 JSON"):
+        client.decide(AgentState(goal="任务", max_steps=3))

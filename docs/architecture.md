@@ -13,7 +13,7 @@
 
 更新时间：2026-08-25。
 
-当前已完成阶段 0：代码、离线测试和硅基流动真实模型手动验收均已通过。阶段 1 尚未开始。
+当前已完成阶段 1：显式状态、受限 Agent Loop、离线测试和硅基流动真实模型验收均已通过。阶段 2 尚未开始。
 
 ```text
 small-agent/
@@ -22,40 +22,48 @@ small-agent/
 ├── requirements.lock        # 经验证环境的完整固定依赖
 ├── src/small_agent/
 │   ├── __main__.py          # python -m small_agent 入口
-│   ├── cli.py               # 单次命令行输入输出
-│   ├── config.py            # API Key 和模型配置
-│   ├── chat.py              # 输入校验和一次生成
-│   └── llm.py               # 硅基流动 Chat Completions Client
-├── tests/                   # Fake Generator/SDK 离线测试
+│   ├── cli.py               # 任务输入和公开步骤输出
+│   ├── config.py            # API、模型和最大步数配置
+│   ├── state.py             # 状态、步骤、决策和终止枚举
+│   ├── agent.py             # 受最大步数约束的 Agent Loop
+│   ├── chat.py              # 阶段 0 单次生成能力（保留）
+│   └── llm.py               # 文本生成与 JSON 决策 Client
+├── tests/                   # Fake Decision Maker/SDK 离线测试
 └── docs/                    # 需求、架构、阶段和交接文档
 ```
 
 当前执行流：
 
 ```text
-CLI 用户输入
-  -> 空输入校验
-  -> Settings.from_env
-  -> SiliconFlowLLMClient.generate
-  -> 硅基流动 Chat Completions API
-  -> choices[0].message.content
-  -> CLI 输出
+CLI 任务目标 -> Settings -> AgentRunner -> AgentState
+                                  |
+                                  v
+                     SiliconFlowLLMClient.decide
+                                  |
+                     JSON Mode Chat Completions
+                                  |
+                     Pydantic AgentDecision 校验
+                                  |
+                     记录公开 Step 并判断终止
+                                  |
+                   continue 时回到 AgentRunner
+                                  |
+                         CLI 展示步骤和结果
 ```
 
-System、User、Assistant 在当前实现中的对应关系：
+System、User、Assistant 在当前决策调用中的对应关系：
 
 - System：`messages` 中角色为 `system` 的固定提示，约束助手角色和回答风格。
-- User：`messages` 中角色为 `user` 的单条消息。
-- Assistant：Chat Completions 返回的第一条 choice 中的 Assistant 文本。
+- User：任务目标、步数预算和此前公开步骤组成的 JSON 上下文。
+- Assistant：Chat Completions 返回并由 Pydantic 校验的 JSON 决策。
 
 当前仍不存在：
 
-- Agent State、Agent Loop 或结构化决策；
 - 工具、记忆、RAG、MCP 或 Multi-Agent；
 - 仓库中的真实 API Key或跨轮会话；
 - 运行时日志、数据库或向量索引。
 
-当前程序只执行一次确定的调用流程，不会自主决定下一步，因此不具备 Agent 能力。
+当前程序是教学用最小 Agent：模型可选择继续、完成或主动失败，程序负责校验、记录状态并强制终止。它没有行动工具，`action` 只是公开说明，不代表发生了外部副作用。
 
 ## 3. 已确定的架构原则
 
@@ -92,7 +100,9 @@ Goal -> State -> Decide -> Act -> Observe -> Update State
            +---------- Continue or Stop ----------+
 ```
 
-终止原因计划包括完成、主动失败、最大步数、用户取消和不可恢复错误。
+终止原因包括完成、主动失败、最大步数、用户取消和不可恢复错误。
+
+该结构已实现。当前五类终止原因分别为 `task_completed`、`active_failure`、`max_steps_reached`、`user_cancelled` 和 `unrecoverable_error`；最大步数限制为 1～10，默认 3。
 
 ### 4.3 阶段 2～4：工具与安全边界
 
@@ -209,7 +219,7 @@ Untrusted Input
 
 - 阶段 0 已决定使用 OpenAI SDK 3.3.1 调用硅基流动 Chat Completions API，默认模型为 `deepseek-ai/DeepSeek-V4-Flash`，见 [ADR-0003](decisions/ADR-0003-use-siliconflow-deepseek-v4-flash.md)；
 - 当前环境已决定使用 venv + pip，见 [ADR-0002](decisions/ADR-0002-use-venv-and-pip.md)；
-- 阶段 1 的结构化决策 Schema 细节；
+- 阶段 1 已决定采用 Pydantic v2 状态模型、JSON Mode 决策和程序控制终止，见 [ADR-0004](decisions/ADR-0004-explicit-state-and-validated-json-decisions.md)；
 - 阶段 4 的 Shell 允许列表范围；
 - Token 估算来源与预算算法；
 - Embedding 模型和向量存储；
