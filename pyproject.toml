@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "small-agent"
+version = "0.0.1"
+description = "从最小 LLM 调用开始的渐进式 AI Agent 学习项目"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openai==3.3.1",
+    "python-dotenv==1.2.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+]
+
+[project.scripts]
+small-agent = "small_agent.cli:main"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
