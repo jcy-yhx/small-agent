@@ -14,7 +14,7 @@
 - 当前依赖：使用 venv + pip；`pyproject.toml` 与 `requirements.lock` 已创建。
 - 当前配置：使用 OpenAI SDK 调用硅基流动 Chat Completions API，默认模型为 `deepseek-ai/DeepSeek-V4-Flash`；未读取或输出真实 API Key。
 - 当前可运行能力：模型从 Calculator、UTC 时间、文本统计和受限文件读取中选择工具，Registry 统一校验、分发和返回结果。
-- 当前版本：阶段 3 已创建本地提交但尚未打 tag；最近阶段 tag 仍为 `stage-02`，远程尚未包含阶段 3。
+- 当前版本：阶段 3 由 Git tag `stage-03` 定位；远程发布状态以仓库 remote 为准。
 
 权威阶段状态以 [stage-specification.md](stage-specification.md) 为准，当前架构以 [architecture.md](architecture.md) 为准。
 

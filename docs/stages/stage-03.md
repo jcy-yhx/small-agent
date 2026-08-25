@@ -4,8 +4,8 @@
 - 开始日期：2026-08-25
 - 完成日期：2026-08-25
 - 开始前 commit：`6883433`（tag `stage-02`）
-- 完成 commit：本文件所在提交（可用 `git log -1` 查看）
-- Git tag：未创建
+- 完成 commit：本文件所在最终提交，以 `stage-03` tag 定位
+- Git tag：`stage-03`
 - 相关 ADR：[ADR-0006](../decisions/ADR-0006-tool-registry-and-low-risk-builtins.md)
 
 ## 1. 本阶段学习目标
@@ -143,12 +143,12 @@ Runner 不再导入或判断任何具体工具名称。
 - [x] 62 个测试和 5/5 在线案例已记录
 - [x] 文档与默认四工具一致
 - [x] 文件工具未读取 `.env`，验收未输出或记录 API Key
-- [x] Git commit 已创建，tag 明确为未创建
+- [x] Git commit/tag 已通过 `stage-03` 定位
 
 ## 18. 待确认项
 
 - 阶段 4 的写入范围、Shell 白名单、审批交互和超时语义需在进入阶段后确定。
-- 阶段 3 已创建本地提交，尚未打 tag 或推送。
+- 阶段 3 的最终提交和 tag 使用 `stage-03` 定位。
 
 ## 19. 等待确认
 
