@@ -4,7 +4,7 @@
 
 ADR 用于记录对项目具有长期影响、存在合理备选并需要解释权衡的决定。它回答“为什么这样做”，而不是替代代码、阶段记录或操作手册。
 
-当前使用硅基流动 Chat Completions API，见 ADR-0003；该决定取代了 ADR-0001 的 OpenAI Responses API 方案。当前环境使用 venv + pip，见 ADR-0002。阶段 1 的显式状态和结构化决策边界见 ADR-0004。向量存储、MCP 和后续框架方案仍是建议或待确认项。
+当前使用硅基流动 Chat Completions API，见 ADR-0003；该决定取代了 ADR-0001 的 OpenAI Responses API 方案。当前环境使用 venv + pip，见 ADR-0002。阶段 1 的显式状态边界见 ADR-0004，阶段 2 的原生 Function Calling 和单 Calculator 边界见 ADR-0005。向量存储、MCP 和后续框架方案仍是建议或待确认项。
 
 ## 2. 何时创建 ADR
 

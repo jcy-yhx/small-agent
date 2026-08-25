@@ -1,19 +1,28 @@
 from __future__ import annotations
 
 import json
-from typing import Protocol
+from typing import Any, Protocol
 
 from openai import OpenAI, OpenAIError
 from pydantic import ValidationError
 
+from small_agent.calculator import CALCULATOR_TOOL_DEFINITION
 from small_agent.config import Settings
-from small_agent.state import AgentDecision, AgentState
+from small_agent.state import (
+    AgentDecision,
+    AgentState,
+    DecisionType,
+    ToolCallRequest,
+)
 
 
 SYSTEM_PROMPT = "你是一个友好、准确、回答简洁的 AI 助手。"
 AGENT_SYSTEM_PROMPT = """你是一个教学用任务 Agent 的决策模块。
-你只能基于用户目标和公开步骤记录决定下一步，不得声称使用了尚不存在的工具。
-返回一个 JSON 对象，不要使用 Markdown，不要披露隐藏思维过程。
+你只能基于用户目标、公开步骤和真实工具 Observation 决定下一步。
+涉及算术时必须调用提供的 calculator 工具，不得自行计算或假装工具已经执行。
+需要工具时使用原生 Function Calling；每次只请求一个工具调用。
+收到成功的工具结果后，用该结果回答，不要重复计算。
+不需要工具时返回一个 JSON 对象，不要使用 Markdown，不要披露隐藏思维过程。
 action 和 observation 只写简短、可公开检查的说明。
 decision 只能是 continue、complete 或 fail：
 - 能直接给出可靠答案时使用 complete，并填写 final_answer；
@@ -68,32 +77,13 @@ class SiliconFlowLLMClient:
         return reply
 
     def decide(self, state: AgentState) -> AgentDecision:
-        """让模型为 Agent 循环返回一个经过校验的 JSON 决策。"""
-        public_steps = [step.model_dump(mode="json") for step in state.steps]
-        prompt = {
-            "goal": state.goal,
-            "current_step": state.current_step,
-            "max_steps": state.max_steps,
-            "previous_steps": public_steps,
-            "required_schema": {
-                "decision": "continue | complete | fail",
-                "action": "非空字符串",
-                "observation": "非空字符串",
-                "final_answer": "complete 时为非空字符串，否则可为 null",
-                "failure_reason": "fail 时为非空字符串，否则可为 null",
-            },
-        }
+        """让模型返回原生工具调用或经过校验的 JSON 决策。"""
         try:
             response = self._sdk_client.chat.completions.create(
                 model=self._model,
-                messages=[
-                    {"role": "system", "content": AGENT_SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": json.dumps(prompt, ensure_ascii=False),
-                    },
-                ],
-                response_format={"type": "json_object"},
+                messages=self._build_agent_messages(state),
+                tools=[CALCULATOR_TOOL_DEFINITION],
+                tool_choice="auto",
                 max_tokens=1024,
             )
         except OpenAIError as exc:
@@ -101,11 +91,107 @@ class SiliconFlowLLMClient:
                 "调用模型失败，请检查网络、API Key、模型名称和账户权限。"
             ) from exc
 
+        choices = getattr(response, "choices", None)
+        if not choices:
+            raise LLMError("模型没有返回可用的 Agent 决策。")
+
+        message = choices[0].message
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls:
+            if len(tool_calls) != 1:
+                raise LLMError("阶段 2 每一步只允许一个工具调用。")
+            tool_call = tool_calls[0]
+            try:
+                request = ToolCallRequest(
+                    id=tool_call.id,
+                    name=tool_call.function.name,
+                    arguments_json=tool_call.function.arguments,
+                )
+            except (AttributeError, ValidationError) as exc:
+                raise LLMError("模型返回的工具调用结构无效。") from exc
+            return AgentDecision(
+                decision=DecisionType.TOOL_CALL,
+                action=f"请求调用工具 {request.name}",
+                observation="等待程序校验参数并执行工具。",
+                tool_call=request,
+            )
+
         content = self._extract_content(response)
         try:
-            return AgentDecision.model_validate_json(content)
+            decision = AgentDecision.model_validate_json(content)
         except ValidationError as exc:
             raise LLMError("模型返回的 Agent 决策不是有效的约定 JSON。") from exc
+        if decision.decision == DecisionType.TOOL_CALL:
+            raise LLMError("工具调用必须使用原生 Function Calling。")
+        return decision
+
+    @staticmethod
+    def _build_agent_messages(state: AgentState) -> list[dict[str, Any]]:
+        prompt = {
+            "goal": state.goal,
+            "current_step": state.current_step,
+            "max_steps": state.max_steps,
+            "required_json_schema_when_not_calling_a_tool": {
+                "decision": "continue | complete | fail",
+                "action": "非空字符串",
+                "observation": "非空字符串",
+                "final_answer": "complete 时为非空字符串，否则可为 null",
+                "failure_reason": "fail 时为非空字符串，否则可为 null",
+            },
+        }
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": AGENT_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(prompt, ensure_ascii=False),
+            },
+        ]
+
+        for step in state.steps:
+            if step.tool_call is not None and step.tool_observation is not None:
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": step.tool_call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": step.tool_call.name,
+                                    "arguments": step.tool_call.arguments_json,
+                                },
+                            }
+                        ],
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": step.tool_call.id,
+                        "content": step.tool_observation.model_dump_json(
+                            exclude_none=True
+                        ),
+                    }
+                )
+            else:
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(
+                            {
+                                "decision": step.decision.value,
+                                "action": step.action,
+                                "observation": step.observation,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
+                messages.append(
+                    {"role": "user", "content": "请根据当前状态继续下一步。"}
+                )
+        return messages
 
     @staticmethod
     def _extract_content(response: object) -> str:

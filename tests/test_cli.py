@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from small_agent.cli import main
 from small_agent.llm import LLMError
-from small_agent.state import AgentDecision, AgentState, DecisionType
+from small_agent.state import (
+    AgentDecision,
+    AgentState,
+    DecisionType,
+    ToolCallRequest,
+)
 
 
 class FakeDecisionMaker:
@@ -69,3 +74,36 @@ def test_cli_reports_model_failure(monkeypatch, capsys) -> None:
     assert exit_code == 1
     assert "终止原因：unrecoverable_error" in captured.out
     assert captured.err == "错误：模拟模型故障\n"
+
+
+def test_cli_distinguishes_tool_intent_execution_and_result(
+    monkeypatch, capsys
+) -> None:
+    decision_maker = FakeDecisionMaker(
+        [
+            AgentDecision(
+                decision=DecisionType.TOOL_CALL,
+                action="请求计算",
+                observation="等待执行",
+                tool_call=ToolCallRequest(
+                    id="call-1",
+                    name="calculator",
+                    arguments_json=(
+                        '{"operation":"multiply","a":12345,"b":678}'
+                    ),
+                ),
+            ),
+            complete("8369910"),
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: "计算 12345 × 678")
+
+    exit_code = main(decision_maker)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "工具调用意图：calculator" in captured.out
+    assert "工具执行：成功" in captured.out
+    assert '工具参数：{"operation":"multiply","a":"12345","b":"678"}' in captured.out
+    assert "工具结果：8369910" in captured.out
+    assert "助手：8369910" in captured.out

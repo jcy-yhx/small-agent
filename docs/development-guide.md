@@ -104,6 +104,15 @@
 - 不使用裸 `except` 吞掉错误。
 - 删除或替换旧接口时说明迁移方式并更新测试。
 
+### 当前单工具规范
+
+- 阶段 2 只允许 `calculator`，不得通过模型返回的名称动态查找或执行 Python 函数；
+- Function Calling 只是调用意图，只有 `AgentRunner` 生成的 `ToolObservation(success=true)` 代表执行成功；
+- Calculator 参数由 Pydantic 校验，禁止 `eval`、`exec` 和动态 import；
+- 操作数最多 100 位、最多 50 位小数，只允许加、减、乘、除；
+- 工具失败作为 Observation 返回循环，不伪装成结果；
+- 第二个工具必须等阶段 3 确认后通过 Registry 引入，不能继续堆叠硬编码分支。
+
 ## 7. 日志与可观察记录
 
 ### 早期阶段

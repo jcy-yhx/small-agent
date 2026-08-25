@@ -2,7 +2,7 @@
 
 ## 1. 当前状态
 
-项目已完成阶段 1，具有显式 State 和受限 Loop 的无工具 Agent。当前没有未解决的已确认代码缺陷；下面记录实际遇到的环境限制和统一排查方法，避免把猜测写成事实。
+项目已完成阶段 2，具有显式 State、受限 Loop 和单 Calculator。当前没有未解决的已确认代码缺陷；下面记录实际遇到的环境限制和统一排查方法，避免把猜测写成事实。
 
 ## 2. 通用排查流程
 
@@ -182,7 +182,7 @@ Environment
 - 实际结果：uv 未安装。
 - 根因：当前系统未提供 uv；这不是项目代码缺陷。
 - 解决方法：按预先允许的备选方案使用 `.venv + pip`，固定直接依赖并生成 `requirements.lock`。
-- 验证测试：editable 安装成功，阶段 1 当前 25 个测试通过。
+- 验证测试：editable 安装成功，阶段 2 当前 46 个测试通过。
 - 安全影响：没有安装额外全局工具；`.venv` 已被 Git 忽略。
 - 相关 ADR/阶段记录：[ADR-0002](decisions/ADR-0002-use-venv-and-pip.md)、[stage-00](stages/stage-00.md)。
 - 仍存在的限制：若未来改用 uv，必须统一迁移锁文件和文档命令。
@@ -213,5 +213,35 @@ Environment
 
 - 表现：CLI 以 `unrecoverable_error` 终止，并提示模型决策不是有效的约定 JSON。
 - 原因：模型返回被截断、不是 JSON、字段名错误，或 `complete`/`fail` 缺少必填结果字段。
-- 排查：确认模型支持 JSON Mode、模型名有效且服务正常；保留合理 `max_tokens`，不要删除 Pydantic 校验。
+- 排查：确认模型名有效、服务正常且返回完整 JSON；保留合理 `max_tokens`，不要删除 Pydantic 校验。阶段 1 使用 JSON Mode；阶段 2 的工具启用请求遵循 ADR-0005，不与自动 Function Calling 同时开启 JSON Mode。
 - 当前策略：安全终止且不自动重试。重试和退避属于后续工程可靠性阶段。
+
+### TR-0003：JSON Mode 与自动 Function Calling 组合未产生工具调用
+
+- 首次出现阶段：阶段 2 真实模型验收。
+- 影响模型：当时配置的 `deepseek-ai/DeepSeek-V4-Flash`。
+- 状态：已解决并保留架构记录。
+- 表现：同时发送 `tools`、`tool_choice=auto` 和 `response_format=json_object` 时，请求成功，但模型返回缺少必要字段的普通 JSON，`tool_calls` 为 `None`。
+- 期望结果：模型为算术任务返回原生 Calculator 调用。
+- 根因：依据重复对照请求，当前模型/服务组合在这组参数下没有选择工具；这是实测兼容性行为，未推断为所有模型的通用限制。
+- 解决方法：工具启用请求移除 `response_format`，保留 Function Calling 和 Pydantic 文本决策校验。
+- 验证测试：同一目标随后返回 `finish_reason=tool_calls`；完整 CLI 两步闭环成功。
+- 安全影响：没有放宽工具名称、参数或执行校验；格式错误仍会安全终止。
+- 相关 ADR/阶段记录：[ADR-0005](decisions/ADR-0005-native-function-calling-with-single-calculator.md)、[stage-02](stages/stage-02.md)。
+
+### 阶段 2 在线验收记录
+
+- 2026-08-25，使用 DeepSeek-V4-Flash 计算 `12345 × 678`。
+- 第一步返回原生 `calculator` 调用；程序校验参数并得到 `8369910`；第二步根据匹配 ID 的 Tool Observation 返回最终中文答案，退出码为 0。
+- 日志分别显示工具调用意图、程序执行、经规范化参数和结果；未读取或输出 API Key。
+
+### TR-0004：直接解析 JSON Decimal 导致长小数先被浮点截短
+
+- 首次出现阶段：阶段 2 数值边界测试。
+- 状态：已解决。
+- 表现：51 位小数通过 `model_validate_json` 后只剩约 16 位，导致精度和小数位限制与原始 JSON 不一致。
+- 根因：该解析路径先把 JSON number 转为二进制浮点，再构造 Decimal；原始十进制词法已经丢失。
+- 解决方法：使用 `json.loads(parse_float=Decimal, parse_int=Decimal)` 保留原始数值，再用 Pydantic 和显式位数验证器校验；同时拒绝非标准 JSON 数字。
+- 验证测试：`0.1 + 0.2` 精确得到 `0.3`；40 位整数乘法精确；超过 100 位或 50 位小数被拒绝。
+- 安全影响：限制超长数值，避免异常大的计算和输出；不解析或执行任何表达式。
+- 相关阶段记录：[stage-02](stages/stage-02.md)。

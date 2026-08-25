@@ -4,22 +4,25 @@
 
 ## 当前阶段
 
-阶段 1（Agent State 与 Agent Loop）已完成，当前等待阶段 2 的明确确认。
+阶段 2（单工具与 Function Calling）已完成，当前等待阶段 3 的明确确认。
 
 当前版本可以：
 
 - 从命令行读取一个任务目标；
 - 使用显式 `AgentState` 在最大步骤数内循环；
 - 让模型返回经过 Pydantic 校验的 JSON 决策；
+- 通过原生 Function Calling 请求唯一的 Calculator 工具；
+- 由程序校验加减乘除参数并使用 `Decimal` 执行；
+- 将真实工具结果作为 Observation 返回模型；
 - 显示每步的公开行动、观察、决策及终止原因；
 - 从环境变量或本地 `.env` 加载 API Key 和模型名称；
 - 使用 Fake LLM 完成不联网的自动化测试。
 
-当前版本是一个无工具的最小 Agent：它有状态和受限循环，但没有工具、记忆、规划、RAG、MCP 或 Multi-Agent。
+当前版本是一个具有单个无副作用 Calculator 的最小 Agent，但没有 Tool Registry、多工具、记忆、规划、RAG、MCP 或 Multi-Agent。
 
 ## 文档
 
-完整需求、学习路线、架构和安全规范见 [docs/README.md](docs/README.md)。本阶段记录见 [docs/stages/stage-01.md](docs/stages/stage-01.md)。
+完整需求、学习路线、架构和安全规范见 [docs/README.md](docs/README.md)。本阶段记录见 [docs/stages/stage-02.md](docs/stages/stage-02.md)。
 
 ## 环境要求
 
@@ -68,7 +71,7 @@ small-agent
 python -m small_agent
 ```
 
-程序会提示输入任务目标，然后展示 Agent 的公开步骤和终止原因。`AGENT_MAX_STEPS` 允许 1～10，默认 3；空目标会在本地被拒绝。
+程序会提示输入任务目标，然后展示 Agent 的公开步骤和终止原因。计算任务会显示工具调用意图、经校验的参数、程序执行结果以及最终回答。`AGENT_MAX_STEPS` 允许 1～10，默认 3；一次工具调用加最终回答通常需要至少 2 步。
 
 ## 测试
 

@@ -5,7 +5,7 @@
 - 决策者：学习者授权阶段 1，Codex 在阶段范围内实施
 - 相关阶段：stage-01
 - 取代：无
-- 被取代：无
+- 被取代：[ADR-0005](ADR-0005-native-function-calling-with-single-calculator.md) 部分取代“工具启用请求同时使用 JSON Mode”的传输选择；显式状态、Pydantic 校验和程序循环仍有效
 
 ## 背景
 

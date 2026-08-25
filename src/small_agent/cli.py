@@ -44,6 +44,16 @@ def main(
         print(f"决策：{step.decision.value}")
         print(f"行动：{step.action}")
         print(f"观察：{step.observation}")
+        if step.tool_call is not None:
+            print(f"工具调用意图：{step.tool_call.name}")
+        if step.tool_observation is not None:
+            print("工具执行：成功" if step.tool_observation.success else "工具执行：失败")
+            if step.tool_observation.arguments is not None:
+                print(f"工具参数：{step.tool_observation.arguments}")
+            if step.tool_observation.output is not None:
+                print(f"工具结果：{step.tool_observation.output}")
+            if step.tool_observation.error is not None:
+                print(f"工具错误：{step.tool_observation.error}")
 
     if state.termination_reason is not None:
         print(f"终止原因：{state.termination_reason.value}")

@@ -11,6 +11,7 @@ NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_lengt
 
 class DecisionType(StrEnum):
     CONTINUE = "continue"
+    TOOL_CALL = "tool_call"
     COMPLETE = "complete"
     FAIL = "fail"
 
@@ -31,6 +32,27 @@ class TerminationReason(StrEnum):
     UNRECOVERABLE_ERROR = "unrecoverable_error"
 
 
+class ToolCallRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    ]
+    name: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=64,
+            pattern=r"^[a-z][a-z0-9_]*$",
+        ),
+    ]
+    arguments_json: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=2, max_length=2000)
+    ]
+
+
 class AgentDecision(BaseModel):
     """模型在一个循环步骤中返回的、可公开展示的结构化决策。"""
 
@@ -41,6 +63,7 @@ class AgentDecision(BaseModel):
     observation: NonEmptyText
     final_answer: NonEmptyText | None = None
     failure_reason: NonEmptyText | None = None
+    tool_call: ToolCallRequest | None = None
 
     @model_validator(mode="after")
     def validate_result_fields(self) -> AgentDecision:
@@ -48,6 +71,33 @@ class AgentDecision(BaseModel):
             raise ValueError("complete 决策必须包含 final_answer")
         if self.decision == DecisionType.FAIL and not self.failure_reason:
             raise ValueError("fail 决策必须包含 failure_reason")
+        if self.decision == DecisionType.TOOL_CALL and self.tool_call is None:
+            raise ValueError("tool_call 决策必须包含 tool_call")
+        if self.decision != DecisionType.COMPLETE and self.final_answer is not None:
+            raise ValueError("只有 complete 决策可以包含 final_answer")
+        if self.decision != DecisionType.FAIL and self.failure_reason is not None:
+            raise ValueError("只有 fail 决策可以包含 failure_reason")
+        if self.decision != DecisionType.TOOL_CALL and self.tool_call is not None:
+            raise ValueError("只有 tool_call 决策可以包含 tool_call")
+        return self
+
+
+class ToolObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    tool_call_id: str
+    tool_name: str
+    arguments: str | None = None
+    success: bool
+    output: NonEmptyText | None = None
+    error: NonEmptyText | None = None
+
+    @model_validator(mode="after")
+    def validate_result(self) -> ToolObservation:
+        if self.success and (self.output is None or self.error is not None):
+            raise ValueError("成功的工具观察必须只包含 output")
+        if not self.success and (self.error is None or self.output is not None):
+            raise ValueError("失败的工具观察必须只包含 error")
         return self
 
 
@@ -58,6 +108,19 @@ class AgentStep(BaseModel):
     decision: DecisionType
     action: NonEmptyText
     observation: NonEmptyText
+    tool_call: ToolCallRequest | None = None
+    tool_observation: ToolObservation | None = None
+
+    @model_validator(mode="after")
+    def validate_tool_fields(self) -> AgentStep:
+        has_tool_data = self.tool_call is not None or self.tool_observation is not None
+        if self.decision == DecisionType.TOOL_CALL and not (
+            self.tool_call is not None and self.tool_observation is not None
+        ):
+            raise ValueError("tool_call 步骤必须包含请求和执行观察")
+        if self.decision != DecisionType.TOOL_CALL and has_tool_data:
+            raise ValueError("非 tool_call 步骤不能包含工具数据")
+        return self
 
 
 class AgentState(BaseModel):
