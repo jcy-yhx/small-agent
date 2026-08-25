@@ -5,7 +5,7 @@
 - 决策者：学习者授权阶段 2，Codex 在阶段范围内实施
 - 相关阶段：stage-02
 - 取代：ADR-0004 中“工具启用请求同时使用 JSON Mode”的传输选择
-- 被取代：无
+- 被取代：[ADR-0006](ADR-0006-tool-registry-and-low-risk-builtins.md) 取代硬编码单工具分发；原生 Function Calling 与程序执行边界仍有效
 
 ## 背景
 

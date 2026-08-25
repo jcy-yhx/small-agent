@@ -102,6 +102,16 @@ def test_siliconflow_client_requests_and_validates_json_decision() -> None:
     assert call["max_tokens"] == 1024
     assert call["tool_choice"] == "auto"
     assert isinstance(call["tools"], list)
+    tool_names = {
+        definition["function"]["name"]  # type: ignore[index]
+        for definition in call["tools"]
+    }
+    assert tool_names == {
+        "calculator",
+        "current_time",
+        "text_stats",
+        "read_text_file",
+    }
     assert isinstance(messages, list)
     assert messages[0] == {"role": "system", "content": AGENT_SYSTEM_PROMPT}
 

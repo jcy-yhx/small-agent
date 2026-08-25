@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Protocol
 
-from small_agent.calculator import Calculator, ToolExecutionError
+from small_agent.builtin_tools import build_default_registry
 from small_agent.llm import LLMError
 from small_agent.state import (
     AgentDecision,
@@ -14,6 +15,7 @@ from small_agent.state import (
     TerminationReason,
     ToolObservation,
 )
+from small_agent.tooling import ToolRegistry
 
 
 class DecisionMaker(Protocol):
@@ -28,13 +30,13 @@ class AgentRunner:
         self,
         decision_maker: DecisionMaker,
         max_steps: int = 3,
-        calculator: Calculator | None = None,
+        registry: ToolRegistry | None = None,
     ) -> None:
         if not 1 <= max_steps <= 10:
             raise ValueError("max_steps 必须在 1 到 10 之间。")
         self._decision_maker = decision_maker
         self._max_steps = max_steps
-        self._calculator = calculator or Calculator()
+        self._registry = registry or build_default_registry(Path.cwd())
 
     def run(
         self,
@@ -111,30 +113,15 @@ class AgentRunner:
         if tool_call is None:  # AgentDecision 的 Schema 已保证；保留防御性检查。
             raise LLMError("模型工具调用缺少必要数据。")
 
-        if tool_call.name != self._calculator.name:
-            return ToolObservation(
-                tool_call_id=tool_call.id,
-                tool_name=tool_call.name,
-                success=False,
-                error=f"未知工具：{tool_call.name}",
-            )
-
-        try:
-            arguments, output = self._calculator.execute(tool_call.arguments_json)
-        except ToolExecutionError as exc:
-            return ToolObservation(
-                tool_call_id=tool_call.id,
-                tool_name=tool_call.name,
-                success=False,
-                error=str(exc),
-            )
-
+        result = self._registry.execute(tool_call.name, tool_call.arguments_json)
         return ToolObservation(
             tool_call_id=tool_call.id,
-            tool_name=tool_call.name,
-            arguments=self._calculator.arguments_for_log(arguments),
-            success=True,
-            output=output,
+            tool_name=result.tool_name,
+            arguments=result.arguments,
+            success=result.success,
+            output=result.output,
+            error=result.error,
+            error_code=(result.error_code.value if result.error_code else None),
         )
 
     @staticmethod

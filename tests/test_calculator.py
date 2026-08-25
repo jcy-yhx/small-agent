@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from small_agent.calculator import Calculator, ToolExecutionError
+from small_agent.calculator import Calculator
+from small_agent.tooling import ToolErrorCode
 
 
 @pytest.mark.parametrize(
@@ -26,34 +27,38 @@ from small_agent.calculator import Calculator, ToolExecutionError
 def test_calculator_executes_decimal_operations_exactly(
     arguments: str, expected: str
 ) -> None:
-    _, result = Calculator().execute(arguments)
+    result = Calculator().invoke(arguments)
 
-    assert result == expected
+    assert result.success is True
+    assert result.output == expected
 
 
 @pytest.mark.parametrize(
-    ("arguments", "message"),
+    ("arguments", "message", "error_code"),
     [
-        ('{"operation":"divide","a":1,"b":0}', "除以零"),
-        ('{"operation":"multiply","a":2}', "参数格式或类型无效"),
-        ('{"operation":"power","a":2,"b":3}', "参数格式或类型无效"),
-        ('{"operation":"add","a":"abc","b":1}', "参数格式或类型无效"),
-        ('{"operation":"add","a":1,"b":2,"code":"ignored"}', "参数格式或类型无效"),
+        ('{"operation":"divide","a":1,"b":0}', "除以零", ToolErrorCode.EXECUTION_ERROR),
+        ('{"operation":"multiply","a":2}', "参数格式或类型无效", ToolErrorCode.INVALID_ARGUMENTS),
+        ('{"operation":"power","a":2,"b":3}', "参数格式或类型无效", ToolErrorCode.INVALID_ARGUMENTS),
+        ('{"operation":"add","a":"abc","b":1}', "参数格式或类型无效", ToolErrorCode.INVALID_ARGUMENTS),
+        ('{"operation":"add","a":1,"b":2,"code":"ignored"}', "参数格式或类型无效", ToolErrorCode.INVALID_ARGUMENTS),
         (
             '{"operation":"add","a":'
             '11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111,'
             '"b":1}',
-            "参数格式或类型无效",
+            "参数格式或类型无效", ToolErrorCode.INVALID_ARGUMENTS,
         ),
         (
             '{"operation":"add","a":0.111111111111111111111111111111111111111111111111111,'
             '"b":1}',
-            "参数格式或类型无效",
+            "参数格式或类型无效", ToolErrorCode.INVALID_ARGUMENTS,
         ),
     ],
 )
 def test_calculator_rejects_unsafe_or_invalid_arguments(
-    arguments: str, message: str
+    arguments: str, message: str, error_code: ToolErrorCode
 ) -> None:
-    with pytest.raises(ToolExecutionError, match=message):
-        Calculator().execute(arguments)
+    result = Calculator().invoke(arguments)
+
+    assert result.success is False
+    assert result.error is not None and message in result.error
+    assert result.error_code == error_code

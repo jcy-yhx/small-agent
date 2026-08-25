@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from small_agent.agent import AgentRunner, DecisionMaker
+from small_agent.builtin_tools import build_default_registry
 from small_agent.config import ConfigurationError, Settings
 from small_agent.llm import SiliconFlowLLMClient
 from small_agent.state import AgentStatus
+from small_agent.tooling import ToolRegistry
 
 
 def main(
     decision_maker: DecisionMaker | None = None,
     max_steps: int | None = None,
+    registry: ToolRegistry | None = None,
 ) -> int:
     """读取任务目标，运行最小 Agent 循环并展示公开步骤。"""
     try:
@@ -26,15 +30,23 @@ def main(
     try:
         active_decision_maker = decision_maker
         active_max_steps = max_steps
+        active_registry = registry or build_default_registry(Path.cwd())
         if active_decision_maker is None:
             settings = Settings.from_env()
-            active_decision_maker = SiliconFlowLLMClient(settings)
+            active_decision_maker = SiliconFlowLLMClient(
+                settings,
+                tool_definitions=active_registry.definitions(),
+            )
             if active_max_steps is None:
                 active_max_steps = settings.max_steps
         if active_max_steps is None:
             active_max_steps = 3
 
-        state = AgentRunner(active_decision_maker, active_max_steps).run(goal)
+        state = AgentRunner(
+            active_decision_maker,
+            active_max_steps,
+            registry=active_registry,
+        ).run(goal)
     except (ConfigurationError, ValueError) as exc:
         print(f"错误：{exc}", file=sys.stderr)
         return 1

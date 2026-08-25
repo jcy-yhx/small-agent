@@ -8,13 +8,13 @@
 
 ## 2. 当前状态
 
-- 当前里程碑：阶段 2 已完成，等待学习者明确确认是否进入阶段 3。
-- 阶段 2 状态：已完成；46 个离线测试和一次真实 Function Calling 验收均已通过。
-- 当前代码：具有显式 State、受限 Loop 和单个 Calculator 的最小 Agent。
+- 当前里程碑：阶段 3 已完成，等待学习者明确确认是否进入阶段 4。
+- 阶段 3 状态：已完成；62 个离线测试和 5/5 真实路由案例均已通过。
+- 当前代码：具有显式 State、受限 Loop、Tool Registry 和四个低风险工具的 Agent。
 - 当前依赖：使用 venv + pip；`pyproject.toml` 与 `requirements.lock` 已创建。
 - 当前配置：使用 OpenAI SDK 调用硅基流动 Chat Completions API，默认模型为 `deepseek-ai/DeepSeek-V4-Flash`；未读取或输出真实 API Key。
-- 当前可运行能力：模型提出原生 Calculator 调用，程序校验和执行，再把真实 Observation 返回模型；测试使用脚本化 Decision Maker 离线运行。
-- 当前版本：阶段 2 由 Git tag `stage-02` 定位；远程发布状态以仓库 remote 为准。
+- 当前可运行能力：模型从 Calculator、UTC 时间、文本统计和受限文件读取中选择工具，Registry 统一校验、分发和返回结果。
+- 当前版本：阶段 3 已创建本地提交但尚未打 tag；最近阶段 tag 仍为 `stage-02`，远程尚未包含阶段 3。
 
 权威阶段状态以 [stage-specification.md](stage-specification.md) 为准，当前架构以 [architecture.md](architecture.md) 为准。
 
@@ -35,6 +35,7 @@
 | [stages/stage-00.md](stages/stage-00.md) | 阶段 0 的实际实现、测试、限制和验收结果 |
 | [stages/stage-01.md](stages/stage-01.md) | 阶段 1 的 State、Loop、测试、限制和验收结果 |
 | [stages/stage-02.md](stages/stage-02.md) | 阶段 2 的 Calculator、Function Calling 和验收结果 |
+| [stages/stage-03.md](stages/stage-03.md) | 阶段 3 的 Tool Registry、多工具和路由验收结果 |
 
 ## 4. 文档权威关系
 

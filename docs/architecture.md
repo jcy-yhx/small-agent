@@ -13,7 +13,7 @@
 
 更新时间：2026-08-25。
 
-当前已完成阶段 2：单 Calculator 的 Function Calling、参数校验、程序执行、Observation 回传、离线测试和真实模型验收均已通过。阶段 3 尚未开始。
+当前已完成阶段 3：统一 Tool 接口、Tool Registry、四个低风险工具、离线测试和真实多工具路由验收均已通过。阶段 4 尚未开始。
 
 ```text
 small-agent/
@@ -27,6 +27,8 @@ small-agent/
 │   ├── state.py             # 状态、步骤、决策和终止枚举
 │   ├── agent.py             # 受最大步数约束的 Agent Loop
 │   ├── calculator.py        # 单工具 Schema、参数校验和 Decimal 执行
+│   ├── tooling.py           # BaseTool、ToolResult 与 ToolRegistry
+│   ├── builtin_tools.py     # 时间、文本、受限文件工具及默认 Registry
 │   ├── chat.py              # 阶段 0 单次生成能力（保留）
 │   └── llm.py               # 文本生成与 JSON 决策 Client
 ├── tests/                   # Fake Decision Maker/SDK 离线测试
@@ -41,15 +43,15 @@ CLI 任务目标 -> Settings -> AgentRunner -> AgentState
                                   v
                      SiliconFlowLLMClient.decide
                                   |
-                  Chat Completions + tools=[calculator]
+                  Chat Completions + Registry definitions
                        |                       |
                native tool_calls       文本 JSON 决策
                        |                       |
                  ToolCallRequest       Pydantic 校验
                        |
-          名称白名单 + CalculatorArguments 校验
+                  ToolRegistry 名称分发
                        |
-                 Decimal 程序执行
+           BaseTool 参数校验 + 具体工具执行
                        |
                ToolObservation 回传模型
                                   |
@@ -69,11 +71,11 @@ System、User、Assistant 在当前决策调用中的对应关系：
 
 当前仍不存在：
 
-- Tool Registry、多工具、有副作用工具、记忆、RAG、MCP 或 Multi-Agent；
+- 有副作用工具、网络工具、记忆、RAG、MCP 或 Multi-Agent；
 - 仓库中的真实 API Key或跨轮会话；
 - 运行时日志、数据库或向量索引。
 
-当前程序是教学用单工具 Agent：模型可选择继续、调用 Calculator、完成或主动失败；程序独占工具执行权并强制终止。只有带成功 `ToolObservation` 的步骤代表真实计算，其他 `action` 仍只是公开说明。
+当前程序是教学用多工具 Agent：模型可从四个工具中选择或直接回答；Registry 独占发现与分发，具体 Tool 独占参数校验和执行。只有成功 `ToolObservation` 代表真实工具行为。
 
 ## 3. 已确定的架构原则
 
@@ -131,7 +133,7 @@ Observation <- Result Normalization <- Restricted Tool Execution
 
 模型只能提出调用意图，程序拥有最终执行权。
 
-阶段 2 已实现该图中的单 Calculator 子集：工具名硬编码为 `calculator`，参数只允许 `add`、`subtract`、`multiply`、`divide` 和两个有限十进制数；未知工具、缺参、错误类型、额外字段与除零均不会执行。Registry、权限策略、人工审批和有副作用工具仍属于阶段 3～4。
+阶段 3 已实现 `BaseTool -> ToolRegistry -> ToolResult`：当前注册 `calculator`、`current_time`、`text_stats`、`read_text_file`。未知工具、重复注册、非法参数和预期执行错误有统一结果。文件读取限制在当前工作区、非隐藏 `.txt/.md`、UTF-8、64 KiB，并阻止绝对路径、`..` 和符号链接逃逸。权限策略、人工审批和有副作用工具仍属于阶段 4。
 
 ### 4.4 阶段 5～7：上下文、记忆和检索
 
@@ -180,7 +182,9 @@ Business Agent Config -> Agent Runtime -> Tool and MCP Gateway
 | `state` | 目标、步骤、Observation、错误、预算和终止状态 | 1 |
 | `agent` | 状态转换循环和最终 Runtime | 1 / 12 |
 | `calculator` | 当前单工具描述、参数 Schema、Decimal 校验与执行 | 2 |
-| `tools` | 未来 Tool 接口、Registry、统一执行和权限 | 3～4 |
+| `tooling` | 当前 Tool 接口、Registry、统一结果和错误分类 | 3 |
+| `builtin_tools` | 当前低风险工具与默认注册表 | 3 |
+| `tools policy` | 未来权限、审批、超时和副作用控制 | 4 |
 | `memory` | 当前任务工作记忆和跨会话持久记忆 | 5～6 |
 | `retrieval` | 文档、切分、Embedding、索引、检索和来源 | 7 |
 | `planning` | Plan、Executor、Replanner 和策略 | 8 |
@@ -234,6 +238,7 @@ Untrusted Input
 - 当前环境已决定使用 venv + pip，见 [ADR-0002](decisions/ADR-0002-use-venv-and-pip.md)；
 - 阶段 1 已决定采用 Pydantic v2 状态模型和程序控制终止，见 [ADR-0004](decisions/ADR-0004-explicit-state-and-validated-json-decisions.md)；
 - 阶段 2 使用原生 Function Calling、硬编码单 Calculator 和程序级执行边界；工具启用请求因真实兼容性证据不再同时启用 JSON Mode，见 [ADR-0005](decisions/ADR-0005-native-function-calling-with-single-calculator.md)；
+- 阶段 3 使用统一 `BaseTool`、`ToolRegistry` 和规范化 `ToolResult`，见 [ADR-0006](decisions/ADR-0006-tool-registry-and-low-risk-builtins.md)；
 - 阶段 4 的 Shell 允许列表范围；
 - Token 估算来源与预算算法；
 - Embedding 模型和向量存储；

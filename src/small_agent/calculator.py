@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 from decimal import Decimal, localcontext
 from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from small_agent.tooling import BaseTool, ToolExecutionError
 
 CALCULATOR_NAME = "calculator"
 FiniteDecimal = Annotated[
@@ -41,50 +41,27 @@ class CalculatorArguments(BaseModel):
         return value
 
 
-class ToolExecutionError(RuntimeError):
-    """工具请求已被程序安全拒绝。"""
-
-
-CALCULATOR_TOOL_DEFINITION: dict[str, object] = {
-    "type": "function",
-    "function": {
-        "name": CALCULATOR_NAME,
-        "description": "精确执行两个十进制数的加、减、乘、除。数学计算必须使用此工具。",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "operation": {
-                    "type": "string",
-                    "enum": [operation.value for operation in CalculatorOperation],
-                    "description": "add、subtract、multiply 或 divide",
-                },
-                "a": {"type": "number", "description": "左操作数"},
-                "b": {"type": "number", "description": "右操作数"},
-            },
-            "required": ["operation", "a", "b"],
-            "additionalProperties": False,
-        },
-    },
-}
-
-
-class Calculator:
-    """阶段 2 唯一允许执行的无副作用工具。"""
+class Calculator(BaseTool[CalculatorArguments]):
+    """精确执行基础十进制运算。"""
 
     name = CALCULATOR_NAME
+    description = "精确执行两个十进制数的加、减、乘、除。数学计算必须使用此工具。"
+    arguments_model = CalculatorArguments
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "operation": {
+                "type": "string",
+                "enum": [operation.value for operation in CalculatorOperation],
+            },
+            "a": {"type": "number"},
+            "b": {"type": "number"},
+        },
+        "required": ["operation", "a", "b"],
+        "additionalProperties": False,
+    }
 
-    def execute(self, arguments_json: str) -> tuple[CalculatorArguments, str]:
-        try:
-            raw_arguments = json.loads(
-                arguments_json,
-                parse_float=Decimal,
-                parse_int=Decimal,
-                parse_constant=self._reject_non_json_number,
-            )
-            arguments = CalculatorArguments.model_validate(raw_arguments)
-        except (TypeError, ValueError) as exc:
-            raise ToolExecutionError("Calculator 参数格式或类型无效。") from exc
-
+    def execute(self, arguments: CalculatorArguments) -> str:
         with localcontext() as context:
             # 两个最多 100 位的十进制数相乘需要最多 200 位有效数字。
             context.prec = 210
@@ -99,19 +76,7 @@ class Calculator:
             else:
                 value = arguments.a / arguments.b
 
-        return arguments, self._format_decimal(value)
-
-    @staticmethod
-    def arguments_for_log(arguments: CalculatorArguments) -> str:
-        return json.dumps(
-            {
-                "operation": arguments.operation.value,
-                "a": str(arguments.a),
-                "b": str(arguments.b),
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        return self._format_decimal(value)
 
     @staticmethod
     def _format_decimal(value: Decimal) -> str:
@@ -119,7 +84,3 @@ class Calculator:
         if "." in formatted:
             formatted = formatted.rstrip("0").rstrip(".")
         return "0" if formatted in {"-0", ""} else formatted
-
-    @staticmethod
-    def _reject_non_json_number(value: str) -> None:
-        raise ValueError(f"非法 JSON 数字：{value}")

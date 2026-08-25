@@ -91,10 +91,13 @@ class ToolObservation(BaseModel):
     success: bool
     output: NonEmptyText | None = None
     error: NonEmptyText | None = None
+    error_code: NonEmptyText | None = None
 
     @model_validator(mode="after")
     def validate_result(self) -> ToolObservation:
-        if self.success and (self.output is None or self.error is not None):
+        if self.success and (
+            self.output is None or self.error is not None or self.error_code is not None
+        ):
             raise ValueError("成功的工具观察必须只包含 output")
         if not self.success and (self.error is None or self.output is not None):
             raise ValueError("失败的工具观察必须只包含 error")

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Protocol
 
 from openai import OpenAI, OpenAIError
 from pydantic import ValidationError
 
-from small_agent.calculator import CALCULATOR_TOOL_DEFINITION
+from small_agent.builtin_tools import build_default_registry
 from small_agent.config import Settings
 from small_agent.state import (
     AgentDecision,
@@ -19,7 +20,8 @@ from small_agent.state import (
 SYSTEM_PROMPT = "你是一个友好、准确、回答简洁的 AI 助手。"
 AGENT_SYSTEM_PROMPT = """你是一个教学用任务 Agent 的决策模块。
 你只能基于用户目标、公开步骤和真实工具 Observation 决定下一步。
-涉及算术时必须调用提供的 calculator 工具，不得自行计算或假装工具已经执行。
+根据工具描述选择最匹配的工具；涉及算术时必须调用 calculator，不得自行计算或假装工具已经执行。
+只有确实需要外部能力时才调用工具；普通知识问答可以直接完成。
 需要工具时使用原生 Function Calling；每次只请求一个工具调用。
 收到成功的工具结果后，用该结果回答，不要重复计算。
 不需要工具时返回一个 JSON 对象，不要使用 Markdown，不要披露隐藏思维过程。
@@ -45,11 +47,21 @@ class TextGenerator(Protocol):
 class SiliconFlowLLMClient:
     """通过硅基流动的 OpenAI 兼容接口完成一次文本生成。"""
 
-    def __init__(self, settings: Settings, sdk_client: OpenAI | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        sdk_client: OpenAI | None = None,
+        tool_definitions: list[dict[str, object]] | None = None,
+    ) -> None:
         self._model = settings.model
         self._sdk_client = sdk_client or OpenAI(
             api_key=settings.api_key,
             base_url=settings.base_url,
+        )
+        self._tool_definitions = (
+            tool_definitions
+            if tool_definitions is not None
+            else build_default_registry(Path.cwd()).definitions()
         )
 
     def generate(self, user_input: str) -> str:
@@ -82,7 +94,7 @@ class SiliconFlowLLMClient:
             response = self._sdk_client.chat.completions.create(
                 model=self._model,
                 messages=self._build_agent_messages(state),
-                tools=[CALCULATOR_TOOL_DEFINITION],
+                tools=self._tool_definitions,
                 tool_choice="auto",
                 max_tokens=1024,
             )
@@ -99,7 +111,7 @@ class SiliconFlowLLMClient:
         tool_calls = getattr(message, "tool_calls", None)
         if tool_calls:
             if len(tool_calls) != 1:
-                raise LLMError("阶段 2 每一步只允许一个工具调用。")
+                raise LLMError("当前每一步只允许一个工具调用。")
             tool_call = tool_calls[0]
             try:
                 request = ToolCallRequest(
