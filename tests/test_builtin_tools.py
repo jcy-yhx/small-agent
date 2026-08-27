@@ -62,6 +62,16 @@ def test_read_text_file_rejects_symlink_escape(tmp_path) -> None:
     assert "安全打开" in result.error  # type: ignore[operator]
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="平台不支持 FIFO")
+def test_read_text_file_rejects_fifo_without_blocking(tmp_path) -> None:
+    os.mkfifo(tmp_path / "blocked.txt")
+
+    result = ReadTextFileTool(tmp_path).invoke('{"path":"blocked.txt"}')
+
+    assert result.success is False
+    assert "不是普通文件" in result.error  # type: ignore[operator]
+
+
 def test_read_text_file_rejects_oversized_file(tmp_path) -> None:
     (tmp_path / "large.txt").write_text("x" * 11, encoding="utf-8")
 

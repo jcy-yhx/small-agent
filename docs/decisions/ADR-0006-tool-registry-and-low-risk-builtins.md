@@ -17,7 +17,7 @@
 
 默认注册 Calculator、UTC 时间、文本统计和受限文本文件读取。`AgentRunner` 持有单次运行唯一 Registry：每次调用 DecisionMaker 时传入该 Registry 生成模型工具定义，工具调用随后仍由同一实例执行。Client 和 Runner 不再各自创建默认 Registry。
 
-文件读取根目录为启动时工作区，只允许非隐藏相对路径、`.txt/.md`、UTF-8 和最大 64 KiB。在支持所需 POSIX 原语的平台上，程序以工作区目录描述符为起点逐级使用 `O_NOFOLLOW` 打开路径，对最终文件描述符执行 `fstat`，再限长读取；平台不支持时安全拒绝。
+文件读取根目录为启动时工作区，只允许非隐藏相对路径、`.txt/.md`、UTF-8 和最大 64 KiB。在支持所需 POSIX 原语的平台上，程序以工作区目录描述符为起点逐级使用 `O_NOFOLLOW` 打开路径，以 `O_NONBLOCK` 打开最终对象，对文件描述符执行 `fstat`，再限长读取；FIFO 等非普通文件会立即拒绝，平台不支持时安全拒绝。Registry 注册和模型调用复用同一工具名称约束。
 
 ## 候选方案
 
@@ -35,7 +35,7 @@
 
 ## 验证与迁移
 
-Calculator 从 `execute(raw_json)` 迁移为统一 `invoke(raw_json)`，内部 `execute(validated_args)`。65 个测试覆盖回归、Registry 单一来源、自定义 Echo 闭环、文件描述符边界和包版本一致性；五个真实路由案例全部正确。若后续需要权限，阶段 4 在 Registry 与执行之间增加 Policy，不改变模型 Function Calling 协议。
+Calculator 从 `execute(raw_json)` 迁移为统一 `invoke(raw_json)`，内部 `execute(validated_args)`。71 个测试覆盖回归、Registry 单一来源和名称协议、自定义 Echo 闭环、文件描述符与 FIFO 边界以及包版本一致性；五个真实路由案例全部正确。若后续需要权限，阶段 4 在 Registry 与执行之间增加 Policy，不改变模型 Function Calling 协议。
 
 ## 相关资料
 

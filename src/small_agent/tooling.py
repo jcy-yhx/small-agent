@@ -4,12 +4,29 @@ import json
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    StringConstraints,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 
 ArgumentsT = TypeVar("ArgumentsT", bound=BaseModel)
+ToolName = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-z][a-z0-9_]*$",
+    ),
+]
+_TOOL_NAME_ADAPTER = TypeAdapter(ToolName)
 
 
 class ToolErrorCode(StrEnum):
@@ -129,6 +146,12 @@ class ToolRegistry:
             self.register(tool)
 
     def register(self, tool: BaseTool[Any]) -> None:
+        try:
+            validated_name = _TOOL_NAME_ADAPTER.validate_python(tool.name)
+        except ValidationError as exc:
+            raise ToolRegistrationError(f"工具名称无效：{tool.name!r}") from exc
+        if validated_name != tool.name:
+            raise ToolRegistrationError(f"工具名称无效：{tool.name!r}")
         if tool.name in self._tools:
             raise ToolRegistrationError(f"工具名称重复：{tool.name}")
         self._tools[tool.name] = tool

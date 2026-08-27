@@ -108,7 +108,11 @@ class ReadTextFileTool(BaseTool[ReadTextFileArguments]):
         if relative.suffix.lower() not in {".txt", ".md"}:
             raise ToolExecutionError("只允许读取 .txt 或 .md 文件。")
 
-        if not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd:
+        if (
+            not hasattr(os, "O_NOFOLLOW")
+            or not hasattr(os, "O_NONBLOCK")
+            or os.open not in os.supports_dir_fd
+        ):
             raise ToolExecutionError("当前平台不支持安全文件读取。")
 
         directory_flags = (
@@ -117,7 +121,12 @@ class ReadTextFileTool(BaseTool[ReadTextFileArguments]):
             | os.O_NOFOLLOW
             | getattr(os, "O_CLOEXEC", 0)
         )
-        file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        file_flags = (
+            os.O_RDONLY
+            | os.O_NONBLOCK
+            | os.O_NOFOLLOW
+            | getattr(os, "O_CLOEXEC", 0)
+        )
         directory_fds: list[int] = []
         file_fd: int | None = None
         try:

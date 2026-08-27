@@ -5,6 +5,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from small_agent.tooling import ToolName
+
 
 NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -39,15 +41,7 @@ class ToolCallRequest(BaseModel):
         str,
         StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
     ]
-    name: Annotated[
-        str,
-        StringConstraints(
-            strip_whitespace=True,
-            min_length=1,
-            max_length=64,
-            pattern=r"^[a-z][a-z0-9_]*$",
-        ),
-    ]
+    name: ToolName
     arguments_json: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=2, max_length=2000)
     ]

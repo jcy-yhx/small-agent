@@ -46,6 +46,11 @@ class UnexpectedBrokenTool(EchoTool):
         raise RuntimeError("不应暴露的内部细节")
 
 
+class RenamedEchoTool(EchoTool):
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
 def test_registry_registers_defines_and_dispatches_tool() -> None:
     registry = ToolRegistry([EchoTool()])
 
@@ -62,6 +67,15 @@ def test_registry_rejects_duplicate_name() -> None:
 
     with pytest.raises(ToolRegistrationError, match="重复"):
         registry.register(EchoTool())
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["", " bad", "bad-name", "Bad", "a" * 65],
+)
+def test_registry_rejects_names_outside_tool_call_protocol(name: str) -> None:
+    with pytest.raises(ToolRegistrationError, match="名称无效"):
+        ToolRegistry([RenamedEchoTool(name)])
 
 
 def test_registry_normalizes_unknown_tool() -> None:

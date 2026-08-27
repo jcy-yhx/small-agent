@@ -133,7 +133,7 @@ Observation <- Result Normalization <- Restricted Tool Execution
 
 模型只能提出调用意图，程序拥有最终执行权。
 
-阶段 3 已实现 `BaseTool -> ToolRegistry -> ToolResult`：当前注册 `calculator`、`current_time`、`text_stats`、`read_text_file`。未知工具、重复注册、非法参数和预期执行错误有统一结果。文件读取限制在当前工作区、非隐藏 `.txt/.md`、UTF-8、64 KiB；在支持 `O_NOFOLLOW` 和相对目录描述符打开的 POSIX 平台上，逐级安全打开路径，对同一文件描述符检查普通文件与大小，并执行限长读取，以阻止路径逃逸和检查后替换。缺少这些原语的平台会拒绝该工具。权限策略、人工审批和有副作用工具仍属于阶段 4。
+阶段 3 已实现 `BaseTool -> ToolRegistry -> ToolResult`：当前注册 `calculator`、`current_time`、`text_stats`、`read_text_file`。工具注册与模型调用复用同一名称协议；未知工具、重复或非法名称、非法参数和预期执行错误均会被拒绝或规范化。文件读取限制在当前工作区、非隐藏 `.txt/.md`、UTF-8、64 KiB；在支持 `O_NOFOLLOW`、`O_NONBLOCK` 和相对目录描述符打开的 POSIX 平台上，逐级安全打开路径，以非阻塞方式打开最终对象，对同一文件描述符检查普通文件与大小，并执行限长读取，以阻止路径逃逸、FIFO 阻塞和检查后替换。缺少这些原语的平台会拒绝该工具。权限策略、人工审批和有副作用工具仍属于阶段 4。
 
 ### 4.4 阶段 5～7：上下文、记忆和检索
 
