@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any, Protocol
 
 from openai import OpenAI, OpenAIError
 from pydantic import ValidationError
 
-from small_agent.builtin_tools import build_default_registry
 from small_agent.config import Settings
 from small_agent.state import (
     AgentDecision,
@@ -15,6 +13,7 @@ from small_agent.state import (
     DecisionType,
     ToolCallRequest,
 )
+from small_agent.tooling import ToolRegistry
 
 
 SYSTEM_PROMPT = "你是一个友好、准确、回答简洁的 AI 助手。"
@@ -51,17 +50,11 @@ class SiliconFlowLLMClient:
         self,
         settings: Settings,
         sdk_client: OpenAI | None = None,
-        tool_definitions: list[dict[str, object]] | None = None,
     ) -> None:
         self._model = settings.model
         self._sdk_client = sdk_client or OpenAI(
             api_key=settings.api_key,
             base_url=settings.base_url,
-        )
-        self._tool_definitions = (
-            tool_definitions
-            if tool_definitions is not None
-            else build_default_registry(Path.cwd()).definitions()
         )
 
     def generate(self, user_input: str) -> str:
@@ -88,13 +81,17 @@ class SiliconFlowLLMClient:
         reply = content.strip()
         return reply
 
-    def decide(self, state: AgentState) -> AgentDecision:
+    def decide(
+        self,
+        state: AgentState,
+        registry: ToolRegistry,
+    ) -> AgentDecision:
         """让模型返回原生工具调用或经过校验的 JSON 决策。"""
         try:
             response = self._sdk_client.chat.completions.create(
                 model=self._model,
                 messages=self._build_agent_messages(state),
-                tools=self._tool_definitions,
+                tools=registry.definitions(),
                 tool_choice="auto",
                 max_tokens=1024,
             )

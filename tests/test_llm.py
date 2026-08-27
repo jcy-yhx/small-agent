@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from small_agent.builtin_tools import build_default_registry
 from small_agent.config import Settings
 from small_agent.llm import (
     AGENT_SYSTEM_PROMPT,
@@ -92,7 +94,10 @@ def test_siliconflow_client_requests_and_validates_json_decision() -> None:
         sdk_client=sdk_client,  # type: ignore[arg-type]
     )
 
-    result = client.decide(AgentState(goal="答案是什么", max_steps=3))
+    result = client.decide(
+        AgentState(goal="答案是什么", max_steps=3),
+        build_default_registry(Path.cwd()),
+    )
 
     call = sdk_client.chat.completions.calls[0]
     messages = call["messages"]
@@ -123,7 +128,10 @@ def test_siliconflow_client_rejects_invalid_json_decision() -> None:
     )
 
     with pytest.raises(LLMError, match="约定 JSON"):
-        client.decide(AgentState(goal="任务", max_steps=3))
+        client.decide(
+            AgentState(goal="任务", max_steps=3),
+            build_default_registry(Path.cwd()),
+        )
 
 
 def test_siliconflow_client_parses_native_function_call() -> None:
@@ -144,7 +152,10 @@ def test_siliconflow_client_parses_native_function_call() -> None:
         sdk_client=sdk_client,  # type: ignore[arg-type]
     )
 
-    result = client.decide(AgentState(goal="计算 12 × 3", max_steps=3))
+    result = client.decide(
+        AgentState(goal="计算 12 × 3", max_steps=3),
+        build_default_registry(Path.cwd()),
+    )
 
     assert result.decision == DecisionType.TOOL_CALL
     assert result.tool_call == ToolCallRequest(
@@ -191,7 +202,7 @@ def test_siliconflow_client_returns_tool_observation_with_matching_id() -> None:
         ],
     )
 
-    result = client.decide(state)
+    result = client.decide(state, build_default_registry(Path.cwd()))
 
     messages = sdk_client.chat.completions.calls[0]["messages"]
     assert result.final_answer == "36"
@@ -212,4 +223,7 @@ def test_siliconflow_client_rejects_multiple_tool_calls() -> None:
     )
 
     with pytest.raises(LLMError, match="只允许一个"):
-        client.decide(AgentState(goal="任务", max_steps=3))
+        client.decide(
+            AgentState(goal="任务", max_steps=3),
+            build_default_registry(Path.cwd()),
+        )

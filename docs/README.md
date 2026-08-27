@@ -9,7 +9,7 @@
 ## 2. 当前状态
 
 - 当前里程碑：阶段 3 已完成，等待学习者明确确认是否进入阶段 4。
-- 阶段 3 状态：已完成；62 个离线测试和 5/5 真实路由案例均已通过。
+- 阶段 3 状态：已完成；65 个离线测试和 5/5 真实路由案例均已通过。
 - 当前代码：具有显式 State、受限 Loop、Tool Registry 和四个低风险工具的 Agent。
 - 当前依赖：使用 venv + pip；`pyproject.toml` 与 `requirements.lock` 已创建。
 - 当前配置：使用 OpenAI SDK 调用硅基流动 Chat Completions API，默认模型为 `deepseek-ai/DeepSeek-V4-Flash`；未读取或输出真实 API Key。

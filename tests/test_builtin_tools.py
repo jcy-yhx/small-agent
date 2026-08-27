@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import stat
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -56,7 +59,7 @@ def test_read_text_file_rejects_symlink_escape(tmp_path) -> None:
     result = ReadTextFileTool(tmp_path).invoke('{"path":"link.md"}')
 
     assert result.success is False
-    assert "超出工作区" in result.error  # type: ignore[operator]
+    assert "安全打开" in result.error  # type: ignore[operator]
 
 
 def test_read_text_file_rejects_oversized_file(tmp_path) -> None:
@@ -67,7 +70,27 @@ def test_read_text_file_rejects_oversized_file(tmp_path) -> None:
     )
 
     assert result.success is False
-    assert "64 KiB" in result.error  # type: ignore[operator]
+    assert "10 字节" in result.error  # type: ignore[operator]
+
+
+def test_read_text_file_uses_bounded_read_after_descriptor_check(
+    tmp_path, monkeypatch
+) -> None:
+    (tmp_path / "growing.txt").write_text("x" * 11, encoding="utf-8")
+    real_fstat = os.fstat
+
+    def stale_fstat(fd: int) -> SimpleNamespace:
+        file_info = real_fstat(fd)
+        return SimpleNamespace(st_mode=stat.S_IFREG, st_size=0, source=file_info)
+
+    monkeypatch.setattr(os, "fstat", stale_fstat)
+
+    result = ReadTextFileTool(tmp_path, max_bytes=10).invoke(
+        '{"path":"growing.txt"}'
+    )
+
+    assert result.success is False
+    assert "10 字节" in result.error  # type: ignore[operator]
 
 
 def test_default_registry_contains_only_stage_three_tools(tmp_path) -> None:

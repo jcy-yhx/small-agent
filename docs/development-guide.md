@@ -112,7 +112,8 @@
 - 操作数最多 100 位、最多 50 位小数，只允许加、减、乘、除；
 - 工具失败作为 Observation 返回循环，不伪装成结果；
 - 新工具必须继承 `BaseTool`，提供 Schema 和确定性测试，经 Registry 注册；不得修改 Agent Loop 增加名称分支。
-- `read_text_file` 只允许工作区内非隐藏 `.txt/.md`、UTF-8、最大 64 KiB；真实 `.env` 永远不属于可读范围。
+- `AgentRunner` 持有单次运行唯一 Registry，并把它传给 DecisionMaker 生成能力声明，再用同一实例执行；不得在 Client 或 Runner 内静默创建另一套默认 Registry。
+- `read_text_file` 只允许工作区内非隐藏 `.txt/.md`、UTF-8、最大 64 KiB；使用同一已打开对象完成类型、大小检查和限长读取，平台缺少安全打开原语时拒绝执行；真实 `.env` 永远不属于可读范围。
 
 ## 7. 日志与可观察记录
 

@@ -15,7 +15,9 @@
 
 采用 `BaseTool`、`ToolRegistry`、`ToolResult` 三层。Tool 声明名称、描述、参数模型、JSON Schema 和执行方法；Registry 负责注册、去重、生成 `tools` 列表及按名称分发；Result 统一成功、参数错误、执行错误和未知工具。Agent Runner 只调用 Registry，不认识具体工具名。
 
-默认注册 Calculator、UTC 时间、文本统计和受限文本文件读取。文件读取根目录为启动时工作区，只允许非隐藏相对路径、`.txt/.md`、UTF-8 和最大 64 KiB，并在解析符号链接后再次验证工作区边界。
+默认注册 Calculator、UTC 时间、文本统计和受限文本文件读取。`AgentRunner` 持有单次运行唯一 Registry：每次调用 DecisionMaker 时传入该 Registry 生成模型工具定义，工具调用随后仍由同一实例执行。Client 和 Runner 不再各自创建默认 Registry。
+
+文件读取根目录为启动时工作区，只允许非隐藏相对路径、`.txt/.md`、UTF-8 和最大 64 KiB。在支持所需 POSIX 原语的平台上，程序以工作区目录描述符为起点逐级使用 `O_NOFOLLOW` 打开路径，对最终文件描述符执行 `fstat`，再限长读取；平台不支持时安全拒绝。
 
 ## 候选方案
 
@@ -33,7 +35,7 @@
 
 ## 验证与迁移
 
-Calculator 从 `execute(raw_json)` 迁移为统一 `invoke(raw_json)`，内部 `execute(validated_args)`。62 个测试覆盖回归、Registry 和文件边界；五个真实路由案例全部正确。若后续需要权限，阶段 4 在 Registry 与执行之间增加 Policy，不改变模型 Function Calling 协议。
+Calculator 从 `execute(raw_json)` 迁移为统一 `invoke(raw_json)`，内部 `execute(validated_args)`。65 个测试覆盖回归、Registry 单一来源、自定义 Echo 闭环、文件描述符边界和包版本一致性；五个真实路由案例全部正确。若后续需要权限，阶段 4 在 Registry 与执行之间增加 Policy，不改变模型 Function Calling 协议。
 
 ## 相关资料
 

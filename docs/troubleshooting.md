@@ -182,7 +182,7 @@ Environment
 - 实际结果：uv 未安装。
 - 根因：当前系统未提供 uv；这不是项目代码缺陷。
 - 解决方法：按预先允许的备选方案使用 `.venv + pip`，固定直接依赖并生成 `requirements.lock`。
-- 验证测试：editable 安装成功，阶段 3 当前 62 个测试通过。
+- 验证测试：editable 安装成功，阶段 3 当前 65 个测试通过。
 - 安全影响：没有安装额外全局工具；`.venv` 已被 Git 忽略。
 - 相关 ADR/阶段记录：[ADR-0002](decisions/ADR-0002-use-venv-and-pip.md)、[stage-00](stages/stage-00.md)。
 - 仍存在的限制：若未来改用 uv，必须统一迁移锁文件和文档命令。
@@ -257,4 +257,30 @@ Environment
 
 - 检查输入是否为当前启动目录下的相对路径，且后缀为 `.txt` 或 `.md`。
 - 隐藏路径、绝对路径、`..`、符号链接逃逸、非 UTF-8、非普通文件和超过 64 KiB 均会拒绝。
+- 当前安全读取依赖 POSIX `O_NOFOLLOW` 和相对目录描述符；缺少这些原语的平台会明确拒绝，不会退回到存在竞态窗口的路径式读取。
 - 不要通过放宽边界读取 `.env`；需要其他文件能力时应在后续阶段先定义权限和审批。
+
+### TR-0005：模型能力声明与执行能力可能分叉
+
+- 首次出现阶段：阶段 3 完成后的代码审查。
+- 影响版本/commit：原 `stage-03` 提交 `ac86c4a`。
+- 状态：已解决。
+- 表现：Client 与 Runner 都能静默创建默认 Registry，或调用者只给一端传入自定义能力，导致模型看到的工具与 Runner 可执行工具不同。
+- 最小复现：Client 只收到 Echo definition，Runner 使用默认四工具。
+- 根因：能力声明和执行各自持有可独立配置的来源，单一 Registry 只由 CLI 惯例保证。
+- 解决方法：Runner 持有唯一 Registry，每次决策将同一实例传给 DecisionMaker，Client 不再保存或创建独立工具定义。
+- 验证测试：自定义 Echo Tool 的 Runner + Fake LLM 闭环断言两次决策与执行均使用同一 Registry。
+- 安全影响：避免模型声明、Registry 和后续 Policy 出现能力漂移。
+- 相关 ADR/阶段记录：[ADR-0006](decisions/ADR-0006-tool-registry-and-low-risk-builtins.md)、[stage-03](stages/stage-03.md)。
+
+### TR-0006：只读文件检查与读取存在竞态窗口
+
+- 首次出现阶段：阶段 3 完成后的代码审查。
+- 影响版本/commit：原 `stage-03` 提交 `ac86c4a`。
+- 状态：已解决（支持安全打开原语的 POSIX 平台）；其他平台安全拒绝。
+- 表现：旧实现依次 `resolve/stat/read_text`，路径可能在检查后被替换，文件也可能在大小检查后增长。
+- 根因：检查路径指向的对象后，按路径名重新打开；实际使用对象并非必然是已检查对象，读取也没有硬上限。
+- 解决方法：从工作区目录描述符逐级使用 `O_NOFOLLOW` 打开；对最终文件描述符执行 `fstat`；最多读取上限加一字节并拒绝超限内容。
+- 验证测试：符号链接拒绝、大小边界和“描述符检查显示未超限但实际内容超限”模型测试通过。
+- 安全影响：降低不可信或并发工作区中的路径替换、符号链接和文件增长风险。
+- 相关 ADR/阶段记录：[ADR-0006](decisions/ADR-0006-tool-registry-and-low-risk-builtins.md)、[stage-03](stages/stage-03.md)。

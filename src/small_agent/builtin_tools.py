@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -99,24 +101,61 @@ class ReadTextFileTool(BaseTool[ReadTextFileArguments]):
 
     def execute(self, arguments: ReadTextFileArguments) -> str:
         relative = Path(arguments.path)
-        if relative.is_absolute() or any(part.startswith(".") for part in relative.parts):
+        if relative.is_absolute() or any(
+            part.startswith(".") for part in relative.parts
+        ):
             raise ToolExecutionError("只允许工作区内的非隐藏相对路径。")
-
-        target = (self._workspace / relative).resolve()
-        try:
-            target.relative_to(self._workspace)
-        except ValueError as exc:
-            raise ToolExecutionError("文件路径超出工作区。") from exc
-        if target.suffix.lower() not in {".txt", ".md"}:
+        if relative.suffix.lower() not in {".txt", ".md"}:
             raise ToolExecutionError("只允许读取 .txt 或 .md 文件。")
-        if not target.is_file():
-            raise ToolExecutionError("目标文件不存在或不是普通文件。")
-        if target.stat().st_size > self._max_bytes:
-            raise ToolExecutionError("目标文件超过 64 KiB 限制。")
+
+        if not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd:
+            raise ToolExecutionError("当前平台不支持安全文件读取。")
+
+        directory_flags = (
+            os.O_RDONLY
+            | os.O_DIRECTORY
+            | os.O_NOFOLLOW
+            | getattr(os, "O_CLOEXEC", 0)
+        )
+        file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        directory_fds: list[int] = []
+        file_fd: int | None = None
         try:
-            return target.read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as exc:
+            directory_fds.append(os.open(self._workspace, directory_flags))
+            for part in relative.parts[:-1]:
+                directory_fds.append(
+                    os.open(part, directory_flags, dir_fd=directory_fds[-1])
+                )
+            file_fd = os.open(
+                relative.parts[-1],
+                file_flags,
+                dir_fd=directory_fds[-1],
+            )
+            file_info = os.fstat(file_fd)
+            if not stat.S_ISREG(file_info.st_mode):
+                raise ToolExecutionError("目标文件不存在或不是普通文件。")
+            if file_info.st_size > self._max_bytes:
+                raise ToolExecutionError(
+                    f"目标文件超过 {self._max_bytes} 字节限制。"
+                )
+
+            with os.fdopen(file_fd, "rb") as opened_file:
+                file_fd = None
+                content = opened_file.read(self._max_bytes + 1)
+            if len(content) > self._max_bytes:
+                raise ToolExecutionError(
+                    f"目标文件超过 {self._max_bytes} 字节限制。"
+                )
+            return content.decode("utf-8")
+        except UnicodeError as exc:
             raise ToolExecutionError("文件无法按 UTF-8 安全读取。") from exc
+        except OSError as exc:
+            raise ToolExecutionError("文件不存在、不是普通文件或无法安全打开。") from exc
+        finally:
+            if file_fd is not None:
+                os.close(file_fd)
+            for directory_fd in reversed(directory_fds):
+                os.close(directory_fd)
 
 
 def build_default_registry(workspace: Path) -> ToolRegistry:

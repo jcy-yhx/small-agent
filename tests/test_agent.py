@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
+
 from small_agent.agent import AgentRunner
+from small_agent.builtin_tools import build_default_registry
 from small_agent.llm import LLMError
 from small_agent.state import (
     AgentDecision,
@@ -10,6 +15,7 @@ from small_agent.state import (
     TerminationReason,
     ToolCallRequest,
 )
+from small_agent.tooling import BaseTool, ToolRegistry
 
 
 class ScriptedDecisionMaker:
@@ -17,16 +23,29 @@ class ScriptedDecisionMaker:
         self.decisions = decisions or []
         self.call_count = 0
         self.states: list[AgentState] = []
+        self.registries: list[ToolRegistry] = []
 
-    def decide(self, state: AgentState) -> AgentDecision:
+    def decide(self, state: AgentState, registry: ToolRegistry) -> AgentDecision:
         self.call_count += 1
         self.states.append(state.model_copy(deep=True))
+        self.registries.append(registry)
         return self.decisions.pop(0)
 
 
 class FailingDecisionMaker:
-    def decide(self, state: AgentState) -> AgentDecision:
+    def decide(self, state: AgentState, registry: ToolRegistry) -> AgentDecision:
         raise LLMError("结构化响应无效")
+
+
+def runner(
+    decision_maker: ScriptedDecisionMaker | FailingDecisionMaker,
+    max_steps: int = 3,
+) -> AgentRunner:
+    return AgentRunner(
+        decision_maker,
+        build_default_registry(Path.cwd()),
+        max_steps,
+    )
 
 
 def decision(kind: DecisionType) -> AgentDecision:
@@ -60,7 +79,7 @@ def test_runner_completes_after_multiple_steps() -> None:
         [decision(DecisionType.CONTINUE), decision(DecisionType.COMPLETE)]
     )
 
-    state = AgentRunner(maker, max_steps=3).run("完成任务")
+    state = runner(maker, max_steps=3).run("完成任务")
 
     assert state.status == AgentStatus.COMPLETED
     assert state.termination_reason == TerminationReason.TASK_COMPLETED
@@ -69,9 +88,9 @@ def test_runner_completes_after_multiple_steps() -> None:
 
 
 def test_runner_records_active_failure() -> None:
-    state = AgentRunner(
-        ScriptedDecisionMaker([decision(DecisionType.FAIL)])
-    ).run("无法完成的任务")
+    state = runner(ScriptedDecisionMaker([decision(DecisionType.FAIL)])).run(
+        "无法完成的任务"
+    )
 
     assert state.status == AgentStatus.FAILED
     assert state.termination_reason == TerminationReason.ACTIVE_FAILURE
@@ -81,7 +100,7 @@ def test_runner_records_active_failure() -> None:
 def test_runner_stops_at_max_steps() -> None:
     maker = ScriptedDecisionMaker([decision(DecisionType.CONTINUE)])
 
-    state = AgentRunner(maker, max_steps=1).run("持续任务")
+    state = runner(maker, max_steps=1).run("持续任务")
 
     assert state.status == AgentStatus.FAILED
     assert state.termination_reason == TerminationReason.MAX_STEPS_REACHED
@@ -92,7 +111,7 @@ def test_runner_stops_at_max_steps() -> None:
 def test_runner_can_be_cancelled_before_model_call() -> None:
     maker = ScriptedDecisionMaker([decision(DecisionType.COMPLETE)])
 
-    state = AgentRunner(maker).run("任务", should_cancel=lambda: True)
+    state = runner(maker).run("任务", should_cancel=lambda: True)
 
     assert state.status == AgentStatus.CANCELLED
     assert state.termination_reason == TerminationReason.USER_CANCELLED
@@ -100,7 +119,7 @@ def test_runner_can_be_cancelled_before_model_call() -> None:
 
 
 def test_runner_converts_model_error_to_unrecoverable_state() -> None:
-    state = AgentRunner(FailingDecisionMaker()).run("任务")
+    state = runner(FailingDecisionMaker()).run("任务")
 
     assert state.status == AgentStatus.ERROR
     assert state.termination_reason == TerminationReason.UNRECOVERABLE_ERROR
@@ -115,7 +134,7 @@ def test_runner_executes_calculator_then_returns_observation_to_model() -> None:
         ]
     )
 
-    state = AgentRunner(maker, max_steps=3).run("计算 12345 × 678")
+    state = runner(maker, max_steps=3).run("计算 12345 × 678")
 
     tool_step = state.steps[0]
     assert state.status == AgentStatus.COMPLETED
@@ -133,7 +152,7 @@ def test_runner_returns_invalid_arguments_as_failed_observation() -> None:
         ]
     )
 
-    state = AgentRunner(maker).run("计算")
+    state = runner(maker).run("计算")
 
     observation = state.steps[0].tool_observation
     assert observation is not None
@@ -147,9 +166,46 @@ def test_runner_rejects_unknown_tool_without_executing_it() -> None:
         [tool_decision("{}", name="shell"), decision(DecisionType.FAIL)]
     )
 
-    state = AgentRunner(maker).run("执行未知工具")
+    state = runner(maker).run("执行未知工具")
 
     observation = state.steps[0].tool_observation
     assert observation is not None
     assert observation.success is False
     assert observation.error == "未知工具：shell"
+
+
+class EchoArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str
+
+
+class EchoTool(BaseTool[EchoArguments]):
+    name = "echo"
+    description = "原样返回文本"
+    arguments_model = EchoArguments
+    parameters_schema = {
+        "type": "object",
+        "properties": {"text": {"type": "string"}},
+        "required": ["text"],
+        "additionalProperties": False,
+    }
+
+    def execute(self, arguments: EchoArguments) -> str:
+        return arguments.text
+
+
+def test_runner_uses_one_registry_for_model_capabilities_and_execution() -> None:
+    registry = ToolRegistry([EchoTool()])
+    fake_llm = ScriptedDecisionMaker(
+        [
+            tool_decision('{"text":"hello"}', name="echo"),
+            decision(DecisionType.COMPLETE),
+        ]
+    )
+
+    state = AgentRunner(fake_llm, registry).run("回显 hello")
+
+    assert registry.names == ("echo",)
+    assert fake_llm.registries == [registry, registry]
+    assert state.steps[0].tool_observation is not None
+    assert state.steps[0].tool_observation.output == "hello"

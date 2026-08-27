@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 from typing import Protocol
 
-from small_agent.builtin_tools import build_default_registry
 from small_agent.llm import LLMError
 from small_agent.state import (
     AgentDecision,
@@ -19,7 +17,11 @@ from small_agent.tooling import ToolRegistry
 
 
 class DecisionMaker(Protocol):
-    def decide(self, state: AgentState) -> AgentDecision:
+    def decide(
+        self,
+        state: AgentState,
+        registry: ToolRegistry,
+    ) -> AgentDecision:
         """根据当前公开状态决定下一步。"""
 
 
@@ -29,14 +31,14 @@ class AgentRunner:
     def __init__(
         self,
         decision_maker: DecisionMaker,
+        registry: ToolRegistry,
         max_steps: int = 3,
-        registry: ToolRegistry | None = None,
     ) -> None:
         if not 1 <= max_steps <= 10:
             raise ValueError("max_steps 必须在 1 到 10 之间。")
         self._decision_maker = decision_maker
         self._max_steps = max_steps
-        self._registry = registry or build_default_registry(Path.cwd())
+        self._registry = registry
 
     def run(
         self,
@@ -55,7 +57,7 @@ class AgentRunner:
                 break
 
             try:
-                decision = self._decision_maker.decide(state)
+                decision = self._decision_maker.decide(state, self._registry)
             except KeyboardInterrupt:
                 self._terminate_cancelled(state)
                 break

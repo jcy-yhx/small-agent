@@ -33,10 +33,7 @@ def main(
         active_registry = registry or build_default_registry(Path.cwd())
         if active_decision_maker is None:
             settings = Settings.from_env()
-            active_decision_maker = SiliconFlowLLMClient(
-                settings,
-                tool_definitions=active_registry.definitions(),
-            )
+            active_decision_maker = SiliconFlowLLMClient(settings)
             if active_max_steps is None:
                 active_max_steps = settings.max_steps
         if active_max_steps is None:
@@ -44,8 +41,8 @@ def main(
 
         state = AgentRunner(
             active_decision_maker,
+            active_registry,
             active_max_steps,
-            registry=active_registry,
         ).run(goal)
     except (ConfigurationError, ValueError) as exc:
         print(f"错误：{exc}", file=sys.stderr)

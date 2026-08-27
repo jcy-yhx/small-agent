@@ -67,7 +67,7 @@ System、User、Assistant 在当前决策调用中的对应关系：
 - System：`messages` 中角色为 `system` 的固定提示，约束助手角色和回答风格。
 - User：任务目标、步数预算和此前公开步骤组成的 JSON 上下文。
 - Assistant：返回原生 `tool_calls`，或由 Pydantic 校验的文本 JSON 决策。
-- Tool：程序将真实 Calculator 执行结果以匹配的 `tool_call_id` 回传；它不是模型生成的结果。
+- Tool：程序将 Registry 中具体工具的真实执行结果以匹配的 `tool_call_id` 回传；它不是模型生成的结果。
 
 当前仍不存在：
 
@@ -75,7 +75,7 @@ System、User、Assistant 在当前决策调用中的对应关系：
 - 仓库中的真实 API Key或跨轮会话；
 - 运行时日志、数据库或向量索引。
 
-当前程序是教学用多工具 Agent：模型可从四个工具中选择或直接回答；Registry 独占发现与分发，具体 Tool 独占参数校验和执行。只有成功 `ToolObservation` 代表真实工具行为。
+当前程序是教学用多工具 Agent：模型可从四个工具中选择或直接回答；`AgentRunner` 持有本次运行唯一的 Registry，并在每次决策时将它交给 LLM Client 生成工具定义，随后仍由该 Registry 执行调用。具体 Tool 独占参数校验和执行。只有成功 `ToolObservation` 代表真实工具行为。
 
 ## 3. 已确定的架构原则
 
@@ -133,7 +133,7 @@ Observation <- Result Normalization <- Restricted Tool Execution
 
 模型只能提出调用意图，程序拥有最终执行权。
 
-阶段 3 已实现 `BaseTool -> ToolRegistry -> ToolResult`：当前注册 `calculator`、`current_time`、`text_stats`、`read_text_file`。未知工具、重复注册、非法参数和预期执行错误有统一结果。文件读取限制在当前工作区、非隐藏 `.txt/.md`、UTF-8、64 KiB，并阻止绝对路径、`..` 和符号链接逃逸。权限策略、人工审批和有副作用工具仍属于阶段 4。
+阶段 3 已实现 `BaseTool -> ToolRegistry -> ToolResult`：当前注册 `calculator`、`current_time`、`text_stats`、`read_text_file`。未知工具、重复注册、非法参数和预期执行错误有统一结果。文件读取限制在当前工作区、非隐藏 `.txt/.md`、UTF-8、64 KiB；在支持 `O_NOFOLLOW` 和相对目录描述符打开的 POSIX 平台上，逐级安全打开路径，对同一文件描述符检查普通文件与大小，并执行限长读取，以阻止路径逃逸和检查后替换。缺少这些原语的平台会拒绝该工具。权限策略、人工审批和有副作用工具仍属于阶段 4。
 
 ### 4.4 阶段 5～7：上下文、记忆和检索
 

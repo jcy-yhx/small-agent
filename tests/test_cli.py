@@ -8,6 +8,7 @@ from small_agent.state import (
     DecisionType,
     ToolCallRequest,
 )
+from small_agent.tooling import ToolRegistry
 
 
 class FakeDecisionMaker:
@@ -20,7 +21,7 @@ class FakeDecisionMaker:
         self.error = error
         self.states: list[AgentState] = []
 
-    def decide(self, state: AgentState) -> AgentDecision:
+    def decide(self, state: AgentState, registry: ToolRegistry) -> AgentDecision:
         self.states.append(state.model_copy(deep=True))
         if self.error is not None:
             raise self.error
